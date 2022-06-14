@@ -1,0 +1,244 @@
+---
+title: "BMI vs Drinking"
+author: "Trent Kiefaber"
+date: "3/25/2021"
+output: word_document
+---
+
+```{r}
+library(tidyverse)
+library(haven)
+library(gtsummary)
+library(ggplot2)
+library(gt)
+library(flextable)
+#Behavioral health data
+Behavioral <- read_xpt("C:/Users/tkste/Downloads/Users/tkste/Downloads/LLCP2019XPT.zip")
+```
+
+```{r}
+names(Behavioral)[32] <- "FEMALE"
+names(Behavioral)[89] <- "AVEDRNK"
+names(Behavioral)[275] <- "AGE"
+names(Behavioral)[280] <- "BMI"
+names(Behavioral)[310] <- "ACTIV"
+newbehav <- subset(Behavioral, AVEDRNK < 76)
+newbehav$ACTIV <- as.numeric(newbehav$ACTIV)
+newbehav <- subset(newbehav, ACTIV > -1 & ACTIV <7000)
+newbehav <- subset(newbehav, BMI > 0 & BMI < 9999)
+```
+
+```{r}
+newbehav$ACTIV <- newbehav$ACTIV/7
+newbehav$BMI <- newbehav$BMI/100
+newbehav$ACTIV <- format(round(newbehav$ACTIV, 2), nsmall = 2)
+```
+
+```{r}
+newbehav$FEMALE[newbehav$FEMALE == "1"] <- "0"
+newbehav$FEMALE[newbehav$FEMALE == "2"] <- "1"
+```
+
+```{r}
+# Create new data set with only these variables
+subnewbehav <- newbehav %>% select(BMI, AVEDRNK, FEMALE, ACTIV, AGE)
+subnewbehav$ACTIV <- as.numeric(subnewbehav$ACTIV)
+```
+
+```{r}
+sumtabledata <- subnewbehav
+sumtabledata$FEMALE[sumtabledata$FEMALE == 0] <- "MALE"
+sumtabledata$FEMALE[sumtabledata$FEMALE == 1] <- "FEMALE"
+```
+
+```{r}
+# the continuous 2 enables the continuous variables to have statistics shown vertically
+# In the statistic all continuous part, the "" denotes where it creates a new line of summary statistics
+sumtabledata %>% tbl_summary(type = all_continuous() ~ "continuous2", statistic = list(all_continuous() ~ c("{mean} ({sd})", "{min}, {max}")), digits = all_continuous() ~ 2, label = c(FEMALE ~ "FEMALE", BMI ~ "BODY MASS INDEX", ACTIV ~ "ACTIVE MINUTES PER DAY", AGE ~ "AGE")) %>% modify_header(label ~ "**Variable**") %>% bold_labels()
+```
+
+```{r}
+# Histogram of BMI
+ggplot(subnewbehav, aes(x = BMI)) + geom_histogram(color = "darkblue", fill = "lightblue") +
+  geom_vline(aes(xintercept=mean(BMI)), color="springgreen4", linetype="dashed", size = 1) + labs(title = "Distribution of BMI", subtitle = "Dashed line is mean" , x = "BMI", y = "Count")
+```
+
+```{r}
+# Histogram of Average drinks a day
+ggplot(subnewbehav, aes(x = AVEDRNK)) + geom_histogram(color = "darkblue", fill = "lightblue") +
+  geom_vline(aes(xintercept=mean(AVEDRNK)), color="springgreen4", linetype="dashed", size = 1) + labs(title = "Distribution of Average Drinks per Day for 30 Days", subtitle = "Dashed line is mean" , x = "Average Drinks a Day", y = "Count")
+```
+
+```{r}
+# Histogram of Age
+ggplot(subnewbehav, aes(x = AGE)) + geom_histogram(color = "darkblue", fill = "lightblue") +
+  geom_vline(aes(xintercept=mean(AGE)), color="springgreen4", linetype="dashed", size = 1) + labs(title = "Distribution of Age", subtitle = "Dashed line is mean" , x = "Age", y = "Count")
+```
+
+```{r}
+# Histogram of ACTIV
+ggplot(subnewbehav, aes(x = ACTIV)) + geom_histogram(color = "darkblue", fill = "lightblue") +
+  geom_vline(aes(xintercept=mean(ACTIV)), color="springgreen4", linetype="dashed", size = 1) + labs(title = "Distribution of Activity", subtitle = "Dashed line is mean" , x = "Minutes Active Per Day", y = "Count")
+```
+
+```{r}
+# To find intercept of scatter plot below
+lmscatter <- lm(BMI ~ AVEDRNK, data = subnewbehav)
+summary(lmscatter)
+```
+
+```{r}
+# Scatter plot of BMI vs AVEDRNK
+ggplot(subnewbehav, aes(x = AVEDRNK, y = BMI)) + geom_point(size = 1.5, shape = 18, color = "deepskyblue3") + geom_smooth(method = lm, se = FALSE, color = "springgreen4") + labs(title = "Average Number of Drinks a Day vs BMI", x = "Average Drinks a Day", y = "BMI", caption = "y-intercept = 27.27" )
+```
+
+```{r}
+# Creating data set for mean of male and female by BMI
+# We have to put Plyr here because once this loads it will remove the rename function which is in Tidyverse/Dplyr
+library(plyr)
+meanbmibysex <- ddply(subnewbehav, "FEMALE", summarise, grpmeanb=mean(BMI))
+```
+
+```{r}
+# Density plot of BMI by Sex
+# When using aes(fill = ...) make sure that fill goes with scale_fill_discrete. If using aes(color = ...) then make sure that scale_color_discrete goes with that
+ggplot(subnewbehav, aes(x = BMI, fill = FEMALE, color = FEMALE)) + geom_density(alpha = 0.5) + labs(title = "Male vs. Female comparison of BMI's", caption = "Female mean = 26.98, Male mean = 28.04") + scale_fill_discrete(name="SEX", labels=c("Male","Female"))  + scale_color_discrete(name="SEX", labels=c("Male","Female")) + geom_vline(data = meanbmibysex, aes(xintercept=grpmeanb, fill = FEMALE, color = FEMALE), linetype="dashed", size = 1)
+```
+
+```{r}
+# This is to make the as_flextable function work. It won't run if gtsummary is loaded
+detach("package:gtsummary", unload = TRUE)
+```
+
+```{r}
+# Make sure to run in order, if you try running this and then the density plot of BMI by sex, the graph above will not work
+subnewbehav$FEMALE <- as.numeric(subnewbehav$FEMALE)
+cormatrix <- cor(subnewbehav, method = "pearson")
+cormatrix <- round(cormatrix, 2)
+# Hide upper triangle
+cormatrix[upper.tri(cormatrix)] <- ""
+cormatrix <- as.data.frame(cormatrix)
+cormatrix
+```
+
+```{r}
+cormatrix %>%
+  as.data.frame() %>%
+  rownames_to_column("Var") %>%
+  flextable()
+```
+
+```{r}
+# Running the Regression
+lm2 <- lm(BMI ~ AVEDRNK + FEMALE + ACTIV + AGE, data = subnewbehav)
+summary(lm2)
+plot(lm2)
+```
+
+```{r}
+# Creates table for regression results
+regtable <- as_flextable(lm2)
+regtable <- hline_bottom(regtable, part = "all")
+regtable
+```
+
+```{r}
+# This creates a new column and labels groups of that column based on values of a different column
+# Here we group the number of drinks into groups for a regression
+# Low is the variable that is dropped
+# Low is values 1 & 2, Medium are values 3 & 4, Large are values 5 through 76
+subnewbehav2 <- subnewbehav
+subnewbehav2$AVEDRNK2 <- factor(NA, levels = c("Low","Medium","Large"))
+subnewbehav2$AVEDRNK2[(subnewbehav2$AVEDRNK > 0) & (subnewbehav2$AVEDRNK < 3)] <- "Low"
+subnewbehav2$AVEDRNK2[(subnewbehav2$AVEDRNK > 2) & (subnewbehav2$AVEDRNK < 5)] <- "Medium"
+subnewbehav2$AVEDRNK2[(subnewbehav2$AVEDRNK > 4) & (subnewbehav2$AVEDRNK < 76)] <- "Large"
+```
+
+```{r}
+# Creating a new data set so we can have the same variable name as in previous regression. We can't have the same variable name in the same data set because the regression wouldn't know which one to pick
+Ordinalbehav <- subnewbehav2 %>% select(BMI, AVEDRNK2, FEMALE, ACTIV, AGE)
+names(Ordinalbehav)[2] <- "AVEDRNK"
+```
+
+```{r}
+# This runs the alcohol grouped regression
+# Used in conjunction with frame above
+lmalcsplit <- lm(BMI ~ AVEDRNK + FEMALE + ACTIV + AGE, data = Ordinalbehav)
+summary(lmalcsplit)
+plot(lmalcsplit)
+```
+
+```{r}
+# Regression with Alc split into groups table for regression results
+regtable2 <- as_flextable(lmalcsplit)
+regtable2 <- hline_bottom(regtable2, part = "all")
+regtable2 <- footnote(regtable2, i = 2:3, j = 1:1, value = as_paragraph(c("Medium is 3-4", "Large is 5-76")))
+# ask her about adding footer above using, inline = TRUE
+regtable2
+```
+
+```{r}
+# Make sure to run in order, if you try running this and then the density plot of BMI by sex, the graph above will not work
+subnewcormatdata <- subnewbehav2
+subnewcormatdata$AVEDRNK2 <- as.numeric(subnewcormatdata$AVEDRNK2)
+cormatrix2 <- cor(subnewcormatdata, method = "pearson")
+cormatrix2 <- round(cormatrix2, 2)
+# Hide upper triangle
+cormatrix2[upper.tri(cormatrix2)] <- ""
+cormatrix2 <- as.data.frame(cormatrix2)
+cormatrix2
+```
+
+```{r}
+cormatrix2 %>%
+  as.data.frame() %>%
+  rownames_to_column("Var") %>%
+  flextable()
+```
+
+
+```{r}
+# Needed for heteroskedasticity testing and robust standard errors
+library(lmtest)
+library(sandwich)
+library(stargazer)
+```
+
+```{r}
+# testing for heteroskedasticity, it is present in the model
+bpt <- bptest(lmalcsplit)
+bptable <- as_flextable(bpt)
+bptable <- hline_bottom(bptable, part = "body")
+bptable <- colformat_double(bptable, j = 2, digits = 3)
+bptable <- autofit(bptable)
+bptable
+```
+
+```{r}
+# Robust standard errors estimates
+robustalcsplit <- coeftest(lmalcsplit)
+robustalcsplit
+```
+
+```{r}
+# Table for robust standard error coefficients
+# Look in latex for the table, it is there. titled "robustalcsplit.tex"
+library(Hmisc)
+latex(robustalcsplit)
+```
+
+```{r}
+# Code used in Latex for comparing the two regression models and robust standard errors
+stargazer(lm2, lmalcsplit, robustalcsplit, title = "Comparison of All Models")
+```
+
+
+
+
+
+
+
+
+
+
+
